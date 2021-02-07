@@ -229,9 +229,28 @@ catch (err) {
 console.log( err ) //ReferenceError
 ```
 
+###### ES6之前的块作用域替代方案
+
+```js
+// 在ES6中可以利用块作用域
+{
+  let a = 2;
+  console.log( a ); // 2
+}
+console.log( a ); // ReferenceError
+
+// ES6之前，try/catch中的catch是块作用域，从而实现。
+try{throw 2;}catch(a){
+  console.log( a ); // 2
+}
+console.log( a ); // ReferenceError
+```
+
+
+
 ##### **3.let**
 
-let显式的形成了一个块
+let形成了一个块作用域
 
 ```js
 var foo = true;
@@ -280,6 +299,32 @@ let不仅将i绑定到了for循坏的块中，事实上将其重新绑定到了�
   }
 }
 ```
+
+###### let和var的区别
+
+1. var存在变量提升，let不存在
+
+2. let不允许在相同作用域内，重复声明同一个变量
+
+3. 暂时性死区
+
+   ```js
+   // 在代码块内，使用let声明前该变量均不可用
+   //暂时性死区 temporal dead zone TDZ
+   var tmp = 123;
+   if(true){
+     tmp = 'abc'; //ReferenceError
+     let tmp;
+   }
+   ```
+
+   
+
+4. 213
+
+5. 
+
+
 
 ##### 4.const
 
@@ -587,4 +632,63 @@ foo.awesome(); //LET ME INTRODUCE: HIPPO
 ```
 
 
+
+### this和对象原型
+
+调用栈中的调用位置，决定了this的绑定
+
+```js
+function baz() {
+  // 当前调用栈是：baz
+  // 因此，当前调用位置是全局作用域
+  console.log( "baz" );
+  bar(); // <-- bar 的调用位置
+}
+
+function bar() {
+  // 当前调用栈是 baz -> bar
+  // 因此，当前调用位置在 baz 中
+  console.log( "bar" );
+  foo(); // <-- foo 的调用位置
+}
+
+function foo() {
+  // 当前调用栈是 baz -> bar -> foo
+  // 因此，当前调用位置在 bar 中
+  console.log( "foo" );
+}
+
+baz(); // <-- baz 的调用位置
+```
+
+#### 绑定规则
+
+##### 默认绑定
+
+```js
+//this的默认绑定指向全局对象
+function foo(){
+  console.log( this.a )
+}
+var a =2;
+foo(); // 2
+
+//在严格模式下，全局对象无法使用默认绑定，此处的this会绑定到undefined
+function foo(){
+  "use strict"
+  console.log( this.a )
+}
+var a = 2;
+foo(); // TypeError: this is undefined
+
+//虽然this的绑定取决于调用位置，但是只有foo()运行在非strict mode下时，默认绑定才能绑定到全局对象；严格模式下与foo()的调用位置无关。
+function foo() {
+  console.log( this.a );
+}
+var a = 2;
+(function(){
+  "use strict";
+  foo(); // 2
+})();
+```
 
