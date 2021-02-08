@@ -1138,3 +1138,400 @@ Object.freeze(..)会创建一个冻结对象，即现有对象调用Object.seal(
 
 ##### [[Get]]
 
+查找是否有名称相同的属性，若为找到，则遍历肯能存在的[[Prototype]]原型链。
+
+```js
+var myObject = {
+  a:undefined
+};
+myObject.a; // undefined
+myObject.b; // undefined
+```
+
+返回值都为undefined，但是对于myObject.b进行了更复杂的处理。
+
+##### [[Put]]
+
+1. 实行是否是访问描述符？是并且存在调用setter
+2. writalbe是否是false？静默失败或者抛出TypeError（严格模式）
+
+##### Getter和Setter
+
+可使用getter和setter部分改写默认操作，当设定getter、setter时，JavaScript会忽略他的value和writable特性。
+
+```js
+var myObject = {
+  get a(){
+    return this._a_;
+  },
+  set a(val){
+    this._a_ = val * 2
+  }
+};
+Object.defineProperty(
+  myObject, // 目标对象
+  "b", // 属性名
+  { // 描述符
+    // 给b设置一个getter
+    get: function(){ return this.a * 2 },
+    // 确保b会出现在对象的属性列表中
+    enumerable: true
+  }
+);
+myObject.a = 2;
+myObject.a; // 4
+myObject.b; // 8
+```
+
+##### 存在性
+
+```js
+var myObject = {
+  a:2
+}
+
+("a" in myObject); //true
+("b" in myObject); //false
+myObject.hasOwnProperty( "a" ); //true
+myObject.hasOwnProperty( "b" ); //false
+```
+
+in 操作会检查属性是否在对象及其 [[Prototype]] 原型链中，hasOwnProperty(..) 只会检查属性是否在myObject对象中。但有的对象可能没有连接到Object.prototype（通过Object.creat(null)来创建）。此时可以通过更强硬的方法判断：
+
+```js
+Object.prototype.hasOwnProperty.call(myObject,"a")
+```
+
+**注意**：in操作检查的是某个属性名是否存在，4 in [2, 4, 6]结果是False，因为访问的是属性名的下标。
+
+###### 枚举
+
+```js
+var myObject = { a:2 };
+Object.defineProperty(
+  myObject,
+  "b",
+  // 让b不可枚举
+  { enumerable: false, value: 3 }
+)
+//通过in和hasOwnProperty均可查到
+myObject.b; // 3
+("b" in myObject); //true
+myObject.hasOwnProperty( "b" ); // true
+//通过for..in循环不能得到
+for (var k in myObject) {
+  console.log( k, myObject[k] ); // a 2
+}
+//判断是否存在于对象中（而不是原型链上）并满足enumerable:true
+myObject.propertyIsEnumerable( "b" ); //false
+//返回数组包含所有可枚举属性（而不是原型链上）
+Object.keys( myObject ); // ["a"]
+//返回一个数组包含所有属性，无论是否可以枚举
+Object.getOwnPropertyNames( myObject ); // ["a", "b"]
+```
+
+#### 遍历
+
+标准for循环便利的是下标来指向值
+forEach(..)会遍历数组中的所有值并忽略回调函数的返回值
+every(..)会一直运行到回调函数返回false
+some(..)会一直运行到回调函数返回true
+for..in遍历对象的可枚举属性，需要手动获取属性值
+for..of (ES6) 可直接遍历值
+
+```js
+// for..of会访问对象请求一个迭代器对象，然后通过调用迭代器对象的next()方法来遍历所有返回值。
+var myArray = [ 1, 2, 3 ];
+for (var v of myArray) {
+  console.log( v );
+}
+
+//数组有内置迭代器@@iterator，可以通过Symbol.iterator来手动遍历数组
+var it = myArray[Symbol.iterator]();
+it.next(); // { value:1, done:false }
+it.next(); // { value:2, done:false }
+it.next(); // { value:3, done:false }
+it.next(); // { done:true }
+```
+
+和数组不同，普通对象没有内置的@@iterator，可以给任何想遍历的对象定义@@iterator
+
+```js
+var myObject = {
+  a: 2,
+  b: 3
+};
+Object.defineProperty( myObject, Symbol.iterator, {
+  enumerable: false,
+  writable: false,
+  configurable: true,
+  value: function() {
+    var o = this;
+    var idx = 0;
+    var ks = Object.keys( o );
+    return {
+      next: function() {
+        return {
+          value: o[ks[idx++]],
+          done: (idx > ks.length)
+        };
+      }
+    };
+  }
+} );
+// 手动遍历 myObject
+var it = myObject[Symbol.iterator]();
+it.next(); // { value:2, done:false } 
+it.next(); // { value:3, done:false } 
+it.next(); // { value:undefined, done:true }
+// 用 for..of 遍历 myObject
+for (var v of myObject) {
+  console.log( v ); // 2 3
+}
+```
+
+for..of循环每次调用myObject迭代器对象的next()方法是，内部的指针都会向前移动并返回对象属性列表的下一个值。只要next()调用会返回value和done:true ，ES6中的for..of就可以遍历它。
+
+例如可以定义一个无限迭代器等功能
+
+```js
+var randoms = {
+  [Symbol.iterator]: function() {
+    return {
+      next: function() {
+        return { value: Math.random() };
+      }
+    };
+  }
+};
+var randoms_pool = [];
+for (var n of randoms) {
+  randoms_pool.push( n );
+  // 防止无限运行！
+  if (randoms_pool.length === 100) break;
+}
+```
+
+
+
+#### 混合对象“类”
+
+面向类的设计模式：实例化（instantiation）、继承（inheritance）和多态（polymorphism）
+
+##### 混入
+
+继承或者实例化时，JavaScript的对象机制不会自动执行复制行为，JavaScript通过**混入**来模拟类的复制行为。
+
+###### 显式混入
+
+1. 显式多态
+   在许多库和框架中被称作extend(..)，这里称作mixin(..)。
+
+```js
+// mixin(..) 例子 :
+function mixin( sourceObj, targetObj ) {
+  for (var key in sourceObj) {
+    // 只会在不存在的情况下复制，子类对父类属性的重写
+    if (!(key in targetObj)) {
+      targetObj[key] = sourceObj[key];
+    }
+  }
+  return targetObj;
+}
+var Vehicle = {
+  engines: 1,
+  ignition: function() {
+    console.log( "Turning on my engine." );
+  },
+  drive: function() {
+    this.ignition();
+    console.log( "Steering and moving forward!" );
+  }
+};
+var Car = mixin( Vehicle, {
+  wheels: 4,
+  drive: function() {
+    // 显式多态：JS在ES6之前没有相对多态的机制，必须绝对引用。使用.call(this)来确保drive()在Car对象的上下文中执行。
+    Vehicle.drive.call( this );
+    console.log(
+      "Rolling on all " + this.wheels + " wheels!"
+    );
+  }
+} );
+```
+
+2. 混合复制
+   可以先复制然后再对Car进行特殊化，从而跳过存在性检查，但是效率更低。
+
+```js
+// 另一种混入函数，可能有重写风险
+function mixin( sourceObj, targetObj ) {
+  for (var key in sourceObj) {
+    targetObj[key] = sourceObj[key];
+  }
+  return targetObj;
+}
+var Vehicle = {
+  // ... 无需再绑定this了
+};
+```
+
+3. 寄生继承
+   复制Vehicle对象的定义，然后混入子类的定义（如果需要保存到父类的特殊引用），然后用这个符合对象构建实例。
+
+```js
+//“寄生类”Car
+function Car() {
+  var car = new Vehicle();
+  car.wheels = 4;
+  //保存到Vehicle::drive()的特殊引用
+  var vehDrive = car.drive;
+  //重写Vehicle::drive()
+  car.drive = function() {
+    vehDrive.call( this );
+    console.log(
+      "Rolling on all" + this.wheels + " wheels!"
+    );
+    return car;
+  }
+}
+var myCar = new Car();
+myCar.drive();
+//Turning on my engine.
+//Steering and moving forward!
+//Rolling on all 4 wheels!
+```
+
+###### 隐式混入
+
+这里通过this绑定隐式的把Something混入Another，最终Something.cool()重的赋值操作都会应用在Another对象上
+
+```js
+var Something = {
+    cool:function(){
+        this.greeting = 'hello world'
+        this.count = this.count?this.count+1:1
+    }
+}
+Something.cool() 
+Something.greeting  //'hello world'
+Something.count   // 1
+
+var Another = {
+    cool:function(){
+        //隐式把Someting混入Another
+        Something.cool.call(this)
+    }
+}
+Another.cool()
+Another.greeting   //'hello world'
+//this绑定在了Another中
+Another.count      //1
+```
+
+### 原型
+
+#### [[Prototype]]
+
+JavaScript对象有特殊的内置属性，其实就是对于其他对象的引用。
+
+```js
+var anotherObject = {
+  a:2
+};
+//创建一个关联到anotherObject的对象，将myObject对象的[[Prototype]]关联到了anotherObject
+var myObject = Object.create( anotherObject );
+myObject.a; // 2
+```
+
+##### Object.prototype
+
+所有普通的[[Prototype]]链最终都会指向内置的Object.prototype。而Object.prototype对象包含了许多通用功能，如.toString()、.valueOf()、.hasOwnProperty(..)、.isPrototypeOf(..)等。
+
+##### 属性设置和屏蔽
+
+```js
+myObject.foo = "bar"
+```
+
+1. 针对这一赋值语句，若myObject中包含foo的普通数据访问属性，则只会修改已有属性值。
+2. 若foo存在myObject中，也出现在[[Prototype]]链上层，会发生屏蔽。myObject中包含的foo属性会屏蔽原型链上层的所有foo属性。
+3. 若foo不存在在myObjec体重，就会遍历[[Prototype]]
+   1. 若链上存在foo的普通数据访问属性，并且没有被标记为只读(writable:true)，就会在myObject中添加一个foo的新属性，它是屏蔽属性。
+   2. 若存在且被标记为只读(writable:false)，不会发生屏蔽，该条赋值语句被忽略，严格模式下抛出错误。
+   3. 若链上存在foo并且是一个setter，就会调用setter，foo不会添加到myObject，也不会重新定义foo这个setter。
+
+若想在3.2和3.3中也屏蔽foo，不能使用 = 操作来赋值，而是使用Object.defineProperty(..)
+
+**注意，有些情况下会产生隐式屏蔽**
+
+```js
+var anotherObject = { a:2 };
+var myObject = Object.create( anotherObject ); anotherObject.a; // 2
+myObject.a; // 2
+anotherObject.hasOwnProperty( "a" ); // true
+myObject.hasOwnProperty( "a" ); // false
+// ++ 相当于myObject.a = myObject.a + 1，因此通过原型链查找到a并获取属性值anotherObject.a，然后加1，接着用[[Put]]将3赋值给myObject新建的屏蔽属性a。
+//需要使用anotherObject.a++来增加其值
+myObject.a++; // 隐式屏蔽！
+anotherObject.a; // 2
+myObject.a; // 3
+myObject.hasOwnProperty( "a" ); // true
+```
+
+#### “类”和“构造函数”
+
+JavaScript中没有类似面向类语言中的复制机制。不能创建一个类的多个实例，只能创建多个对象，它们的[[Prototype]]关联同一个对象。JavaScript不是继承，更准确的说应该是通过**委托**访问另一个对象的属性和函数。
+
+```js
+function Foo() {
+  // ...
+}
+var a = new Foo();
+Object.getPrototypeOf( a ) === Foo.prototype; // true
+Foo.prototype.constructor === Foo; // true
+//Foo.prototype中有一个共有并且不可枚举的属性.constructor,应用的是对象关联的函数Foo
+a.constructor === Foo; // true
+```
+
+Foo并不是构造函数，当在普通的函数调用前加上new关键字后，就会把这个函数调用编程一个“构造函数调用”。new会劫持所有普通函数并用构造对象的形式来调用它。
+
+```js
+function NothingSpecial() {
+  console.log( "Don't mind me!" );
+}
+var a = new NothingSpecial();
+// "Don't mind me!" 
+a; // {}
+```
+
+使用new调用时，会构造一个对象并赋值给a，可以说带new的函数调用是JavaScript中的“构造函数调用”
+
+#### 技术
+
+```js
+function Foo() { /* .. */ }
+Foo.prototype = { /* .. */ }; // 创建一个新原型对象
+var a1 = new Foo();
+a1.constructor === Foo; // false!
+a1.constructor === Object; // true!
+```
+
+a1没有.constructor属性，会委托[[Prototype]]链上的Foo.prototype，而Foo也没有，因此继续委托给委托连顶端的Object.prototype。这个对象有.constructor属性，指向内置的Object(..)函数。
+
+若想要修复.constructor，需要手动添加一个不可枚举属性：
+
+```js
+function Foo() { /* .. */ }
+Foo.prototype = { /* .. */ }; // 创建一个新原型对象
+
+// 需要在 Foo.prototype 上“修复”丢失的 .constructor 属性
+// 新对象属性起到 Foo.prototype 的作用
+Object.defineProperty( Foo.prototype, "constructor" , {
+  enumerable: false,
+  writable: true,
+  configurable: true,
+  value: Foo // 让 .constructor 指向 Foo
+} );
+```
+
