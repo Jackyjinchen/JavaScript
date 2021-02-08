@@ -95,7 +95,7 @@ console.log( o1.a ); //2
 
 foo( o2 );
 console.log( o2.a ); //undefined
-console.log( a ); //a被泄露到了全局作用域
+console.log( a ); // 2--a被泄露到了全局作用域
 ```
 
 上述两种方式会存在运行效率问题，同时不推荐使用，在严格模式下会被限制。
@@ -116,7 +116,7 @@ function doSomething(a) {
   console.log( b * 3);
   
 }
-doSomething( 2 )
+doSomething( 2 ); // 15
 ```
 
 通过内部定义可以隐藏变量和函数定义，但是会导致额外的**作用域污染**
@@ -139,7 +139,7 @@ foo(); //具名函数foo()污染了全局作用域
 
 匿名函数会导致
 
-1. 调试困难
+1. 在栈追踪中不会显示出有意义的函数名，导致调试困难
 2. 引用自身时需要使用已过期的arguments.callee
 3. 可读性差
 
@@ -164,7 +164,7 @@ setTimeout( function timeoutHandler() { //行内函数表达式
 (function(){ .. }())
 ```
 
-IIFE可以当做函数并传递参数进去
+IIFE可以当做函数调用并传递参数进去
 
 ```js
 (function IIFE( global ){ //将window参数名global传入
@@ -205,7 +205,7 @@ var a = 2;
 
 #### 块作用域
 
-在for中，定义的变量i会被绑定在**外部作用于中**！！！
+在for中，定义的变量i会被绑定在**外部作用域中**！！！
 
 ```js
 for (var i=0; i<10; i++) {
@@ -215,9 +215,11 @@ for (var i=0; i<10; i++) {
 
 ##### 1.with
 
+用with从对象中创建的作用域仅在with生命中而非外部作用域中有效。
+
 ##### **2.try/catch**
 
-从ES3规范中catch分句中会创建一个块作用域，仅在catch中有效
+从ES3规范中规定catch分句中会创建一个块作用域，仅在catch中有效
 
 ```js
 try {
@@ -318,14 +320,6 @@ let不仅将i绑定到了for循坏的块中，事实上将其重新绑定到了�
    }
    ```
 
-   
-
-4. 213
-
-5. 
-
-
-
 ##### 4.const
 
 const为固定常量，也可以用来创建块作用域变量。
@@ -367,7 +361,7 @@ a = 2;
 
 ```js
 foo(); //不是ReferenceError，而是TypeError
-var foo = functon bar() {
+var foo = function bar() {
   // ...
 };
 ```
@@ -404,7 +398,7 @@ var foo;
 function foo(){
   console.log( 1 );
 }
-foo = function(){ //2
+var foo = function(){
   console.log( 2 );
 };
 function foo(){
@@ -438,8 +432,8 @@ function foo() {
   }
   return bar;
 }
-bar baz = foo();
-baz(); //闭包
+var baz = foo();
+baz(); // 2 ——闭包
 ```
 
 范例2：
