@@ -633,7 +633,7 @@ foo.awesome(); //LET ME INTRODUCE: HIPPO
 
 
 
-### this和对象原型
+### this解析
 
 调用栈中的调用位置，决定了this的绑定
 
@@ -665,6 +665,8 @@ baz(); // <-- baz 的调用位置
 
 ##### 默认绑定
 
+决定this绑定对象的并不是调用位置是否处于严格模式，而是函数体是否处于严格模式，从而this绑定到undefined或者全局对象上
+
 ```js
 //this的默认绑定指向全局对象
 function foo(){
@@ -691,4 +693,318 @@ var a = 2;
   foo(); // 2
 })();
 ```
+
+##### 隐式绑定
+
+对象属性引用链中只有最顶层或者说最后一层会影响调用位置。
+
+```js
+function foo() {
+  console.log( this.a );
+}
+var obj2 = {
+  a: 42,
+  foo: foo
+};
+var obj1 = {
+  a: 2,
+  obj2: obj2
+};
+obj1.obj2.foo(); // 42
+```
+
+###### 隐式丢失
+
+被隐式绑定的函数会丢失绑定对象，应用默认绑定，将this绑定到全局对象或者undefined上。 
+
+```js
+function foo() {
+  console.log( this.a );
+}
+function doFoo(fn) {
+  // fn 其实引用的是 foo
+  fn(); // <-- 调用位置！
+}
+var obj = {
+  a: 2,
+  foo: foo
+};
+var a = "oops, global"; // a 是全局对象的属性
+doFoo( obj.foo ); // "oops, global"
+
+//调用语言内置函数没有区别
+setTimeout( obj,foo, 100); // "oops, global"
+```
+
+参数传递也是一种隐式赋值
+
+```js
+function foo() {
+  console.log( this.a );
+}
+function doFoo(fn) {
+  // fn 其实引用的是
+  foo fn(); // <-- 调用位置！
+}
+var obj = {
+  a: 2,
+  foo: foo
+};
+var a = "oops, global"; // a 是全局对象的属性
+doFoo( obj.foo ); // "oops, global"
+```
+
+##### 显式绑定
+
+可通过call(..)和apply(..)进行显式绑定，但显式绑定无法解决丢失绑定问题。
+
+```js
+function foo(){
+  console.log( this.a );
+}
+var obj = {
+  a:2
+};
+foo.call( obj ); //2
+//通过.call(..)强制将this绑定到obj上
+```
+
+当传入一个原始值来当做this的绑定对象，这个原始值会被转换成它的对象形式( new String(..)、new Boolean(..)或者new Number(..))。这成为“装箱”。
+
+###### 硬绑定
+
+显式的强制绑定，无论如何调用函数bar，都会手动在obj上调用foo
+
+```js
+function foo() {
+  console.log( this.a );
+}
+var obj = {
+  a:2
+};
+var bar = function() {
+  foo.call( obj );
+};
+bar(); // 2
+setTimeout( bar, 100 ); // 2
+// 硬绑定的 bar 不可能再修改它的 this
+bar.call( window ); // 2
+```
+
+硬绑定的典型应用场景就是创建包裹函数，传入所有的参数并返回接收到的所有值
+
+```js
+var bar = function(){
+  return foo.apply( obj, arguments );
+}
+
+//也可以创建一个可复用的辅助函数
+function bind(fn, obj){
+  return function(){
+    return fn.apply( obj, arguments );
+  }
+}
+...
+var bar = bind( foo, obj );
+var b = bar( 3 );
+```
+
+由于硬绑定的常用性，在ES5中提供了内置的方法Function.prototype.bind，使用.bind(..)会返回一个硬编码的新函数，并将参数设置为this的上下文并调用原始函数。
+
+###### API调用的“上下文”
+
+第三方库或者JavaScrpit语言和宿主环境中的许多新的内置函数，都提可选参数，被称为“上下文”(context)，确保回调函数使用指定的this
+
+```js
+[1, 2, 3].forEach( foo, obj ); //把this绑定到obj
+```
+
+##### new绑定
+
+构建新对象并绑定到调用的this上
+
+```js
+function foo(a) {
+this.a = a; }
+var bar = new foo(2);
+console.log( bar.a ); // 2
+```
+
+##### 优先级
+
+new优先级 > 显式优先级
+
+```js
+function foo(p1,p2) {
+this.val = p1 + p2; }
+// 之所以使用 null 是因为在本例中我们并不关心硬绑定的 this 是什么
+// 反正使用 new 时 this 会被修改
+var bar = foo.bind( null, "p1" );
+var baz = new bar( "p2" );
+baz.val; // p1p2
+```
+
+###### 判断this
+
+1. new绑定，this绑定的是新创建的对象
+
+   ```js
+   var bar = new foo()
+   ```
+
+2. call、apply (显式绑定)，this绑定是指定的对象
+
+   ```js
+   var bar = foo.call(obj2)
+   ```
+
+3. 上下文对象调用(隐式绑定)，this绑定的是上下文对象。
+
+   ```js
+   var bar = obj1.foo()
+   ```
+
+4. 如果都不是，使用默认绑定。在严格模式下绑定undefined，否则绑定到全局对象
+
+   ```js
+   var bar = foo()
+   ```
+
+#### 绑定例外
+
+##### 忽略this
+
+把null或者undefined作为this的绑定对象传入call、apply或者bind，应用默认规则绑定。
+**应用场景**：使用apply(..)来展开一个数组，并当做参数传入函数。bind(..)可以对参数进行柯里化(预先设置一些参数)。
+但是默认规则会把**this绑定到全局对象**，会导致全局对象修改等问题、
+
+```js
+function foo(a,b){
+  console.log( "a:" + a + ", b:" + b );
+}
+//把数组展开成参数
+foo.apply( null, [2, 3] ); // a:2, b:3
+
+//使用bind(..)进行柯里化
+var bar = foo.bind( null, 2);
+bar( 3 ); // a:2, b:3
+```
+
+###### **更安全的this**
+
+可以传入特殊对象，把this绑定到DMZ(demilitarized zone，非军事区)
+
+```js
+//创建了一个空对象，但是相比{}，不会创建Object.prototype这个委托
+var ø = Object.create( null ); //创建一个DMZ对象
+foo.apply( ø, [..] );
+```
+
+##### 间接引用
+
+```js
+function foo() {
+  console.log( this.a );
+}
+var a = 2;
+var o = { a: 3, foo: foo };
+var p = { a: 4 };
+o.foo(); // 3
+(p.foo = o.foo)(); // 2
+//p.foo = o.foo 返回值是目标函数的引用，调用的是foo()而不是p.foo()或者o.foo()，因此这里应用的是默认绑定。
+```
+
+##### 软绑定
+
+硬绑定后无法通过显式或者隐式来修改this，可以给默认绑定指定一个全局对象或者undefined以外的值来实现硬绑定相同效果，同时保留修改this的能力。
+
+```js
+if (!Function.prototype.softBind) {
+  Function.prototype.softBind = function(obj) {
+    var fn = this;
+    // 捕获所有 curried 参数
+    var curried = [].slice.call( arguments, 1 );
+    var bound = function() {
+      return fn.apply(
+        (!this || this === (window || global)) ?
+        	obj : this
+        curried.concat.apply( curried, arguments )
+      );
+    };
+    bound.prototype = Object.create( fn.prototype );
+    return bound;
+  };
+}
+```
+
+上述代码会检查调用时的this，如果是全局对象或者undefined，就把指定的默认对象obj绑定到this，佛足额不会修改this
+
+```js
+function foo() {
+  console.log("name: " + this.name);
+}
+var obj = { name: "obj" },
+    obj2 = { name: "obj2" },
+    obj3 = { name: "obj3" };
+var fooOBJ = foo.softBind( obj );
+fooOBJ(); // name: obj
+obj2.foo = foo.softBind(obj);
+obj2.foo(); // name: obj2 <---- 看！！！
+fooOBJ.call( obj3 ); // name: obj3 <---- 看！
+setTimeout( obj2.foo, 10 );
+// name: obj <---- 应用了软绑定
+```
+
+#### this词法
+
+箭头函数根据外层（函数或全局）作用域来决定this，箭头函数的绑定无法被修改。
+
+```js
+function foo(){
+  return (a) => {
+    //this继承自foo()
+    console.log( this.a )
+  };
+}
+var obj1 = { a:2 };
+var obj2 = { a:3 };
+
+var bar = foo.call( obj1 );
+bar.call( obj2 ); // 2
+```
+
+
+
+### 对象
+
+#### 类型
+
+JavaScript共有六种主要类型：string、number、boolean、null、undefined、object
+
+前5种简单基本类型不是对象，null有时会被当做一种对象，但是其实这是语言本身的一个bug，即对null执行typeof null会返回字符串"object"。（JavaScript中二进制前三位为0会被判断为object，**null的二进制全是0**，所以执行typeof会返回"object"）
+
+##### 内置对象
+
+对象子类型被称为内置对象：
+
+String、Number、Boolean、Object、Function、Array、Date、RegExp、Error
+
+这些内置函数可以当做构造函数来使用（new产生的函数调用）
+
+```js
+//此处只是一个字面量不可变，若进行操作需要转换成String对象
+//语言会在必要时自动把字符串转换成一个String对象
+var strPrimitive = "I am a string";
+typeof strPrimitive; // "string"
+strPrimitive instanceof String; // false
+
+var strObject = new String( "I am a string" );
+typeof strObject; // "object"
+strObject instanceof String; // true
+
+// 检查 sub-type 对象
+Object.prototype.toString.call( strObject ); // [object String]
+```
+
+
 
