@@ -727,43 +727,47 @@ var a = "oops, global"; // a 是全局对象的属性
 doFoo( obj.foo ); // "oops, global"
 
 //调用语言内置函数没有区别
-setTimeout( obj,foo, 100); // "oops, global"
+setTimeout( obj.foo, 100); // "oops, global"
 ```
 
 参数传递也是一种隐式赋值
-
-```js
-function foo() {
-  console.log( this.a );
-}
-function doFoo(fn) {
-  // fn 其实引用的是
-  foo fn(); // <-- 调用位置！
-}
-var obj = {
-  a: 2,
-  foo: foo
-};
-var a = "oops, global"; // a 是全局对象的属性
-doFoo( obj.foo ); // "oops, global"
-```
 
 ##### 显式绑定
 
 可通过call(..)和apply(..)进行显式绑定，但显式绑定无法解决丢失绑定问题。
 
 ```js
+var a = 123;
 function foo(){
   console.log( this.a );
 }
 var obj = {
   a:2
 };
-foo.call( obj ); //2
-//通过.call(..)强制将this绑定到obj上
+foo.call( obj ); //2 通过.call(..)强制将this绑定到obj上
+setTimeout( foo, 100 ); //123 绑定丢失
 ```
 
 当传入一个原始值来当做this的绑定对象，这个原始值会被转换成它的对象形式( new String(..)、new Boolean(..)或者new Number(..))。这成为“装箱”。
+
+###### call和apply区别
+
+参数传递格式不同，apply为数组形式，call为参数列表形式
+apply( [ thisObj [ , argArray ] ] );
+call( [ thisObject [ , arg1 [ , arg2 [ , ... , argn ] ] ] ] );
+
+###### apply的用法
+
+apply可以将一个数组默认转换为一个参数列表。对于Math.max不支持数组形式的参数，但是支持Math.max(param1, param2, param3...)。因此可以通过apply来解决这一问题；Arrayprototype.push方法也可以通过apply来解决数组的传值。
+
+```js
+Math.max.apply( null, array );
+Math.min.apply( null, array );
+
+var arr1 = new Array("1", "2", "3");
+var arr2 = new Array("4", "5", "6");
+Array.prototype.push.apply( arr1, arr2 );
+```
 
 ###### 硬绑定
 
@@ -815,11 +819,17 @@ var b = bar( 3 );
 
 ##### new绑定
 
-构建新对象并绑定到调用的this上
+使用new来调用函数会执行四步操作：
+
+1. 创建一个全新对象
+2. 新对象被执行[[原型]]连接
+3. 新对象绑定到函数调用的this
+4. 如果没有返回其他对象，new表达式中的函数调用会自动返回新对象
 
 ```js
 function foo(a) {
-this.a = a; }
+	this.a = a;
+}
 var bar = new foo(2);
 console.log( bar.a ); // 2
 ```
@@ -931,7 +941,7 @@ if (!Function.prototype.softBind) {
 }
 ```
 
-上述代码会检查调用时的this，如果是全局对象或者undefined，就把指定的默认对象obj绑定到this，佛足额不会修改this
+上述代码会检查调用时的this，如果是全局对象或者undefined，就把指定的默认对象obj绑定到this，否则不会修改this
 
 ```js
 function foo() {
@@ -1000,5 +1010,131 @@ strObject instanceof String; // true
 Object.prototype.toString.call( strObject ); // [object String]
 ```
 
+null和undefined没有构造形式，只有文字形式。
+Date只有构造，没有文字形式。
+对于Object、Array、Function和RegExp，无论使用文字形式还是构造形式，都是对象，不是字面量。
+Error一般在抛出异常自动创建，也可以new Error(..)。
 
+#### 内容
+
+```js
+var myObject = {
+  a: 2
+};
+myObject.a; // 2 属性访问，需满足标识符的命名规范
+myObject["a"]; // 2 键访问，可接受任意UTF-8/Unicode字符串
+```
+
+##### 可计算属性名
+
+ES6中增加了可计算属性名，使用[]包裹表达式来当做属性名
+
+```js
+var prefix = "foo";
+var myObject = {
+  [prefix + "bar"]: "hello",
+  [prefix + "baz"]: "world"
+};
+myObject["foobar"]; // hello
+myObject["foobaz"]; // world
+```
+
+##### 数组
+
+数组也支持 [ ] 访问形式，数组通过索引值来访问，也可以添加命名属性（ . 语法或者 [ ] 语法）
+
+```js
+//当向数组添加一个属性，但是属性名“看起来”想一个数字，则会变成数组下标
+var myArray = [ "foo", 42, "bar" ];
+myArray["3"] = "baz";
+myArray.length; // 4
+myArray[3]; // "baz"
+```
+
+##### 复制对象
+
+ES6定义了Object.assign(..)方法实现浅复制。它会遍历一个或多个源对象的所有可枚举的自由键，并通过=操作复制到目标对象，源对象属性的一些特性（比如writable）不会被复制到目标对象。
+
+```js
+function anotherFunction() { /*..*/ }
+var anotherObject = {
+  c: true
+};
+var anotherArray = [];
+var myObject = {
+  a: 2,
+  b: anotherObject, // 引用，不是复本！
+  c: anotherArray, // 另一个引用！
+  d: anotherFunction
+};
+var newObj = Object.assign( {}, myObject )
+
+newObj.a; // 2
+newObj.b === anotherObject; // true
+newObj.c === anotherArray; // true
+newObj.d === anotherFunction; // true
+```
+
+##### 属性描述符
+
+ES5之后所有属性都具备属性描述符
+
+```js
+var myObject = {
+  a:2
+};
+
+Object.getOwnPropertyDescriptor( myObject, "a" );
+// {
+//   value: 2,
+//   writable: true, 可写
+//   enumerable: true, 可枚举
+//   configurable: true, 可配置
+// }
+```
+
+在创建普通属性是属性描述符会使用默认值，也可以通过Object.defineProperty(..)修改
+
+```js
+var myObject = {};
+Object.defineProperty( myObject, "a", {
+  value: 2,
+  writable: true,
+  configurable: true,
+  enumerable: true
+});
+```
+
+1. writable：设置为false默认无法修改，严格模式会报TypeError
+2. configurable：单项修改，设定后无法修改属性（例外：false状态下可以把writable从true修改为false，但是无法改回；无法用delete删除属性
+3. enumerable：控制属性是否出现在对象的属性没居中，比如 for .. in 循环。
+
+##### 不变性
+
+###### 对象常量
+
+结合writable:false 和 configurable:false 可以创建一个常量属性（不可修改、重定义或者删除）
+
+###### 禁止扩展
+
+使用Object.preventExtensions(..)禁止一个对象添加新属性并保留已有属性。
+
+```js
+var myObject = {
+  a:2
+};
+Object.preventExtensions( myObject );
+myObject.b = 3;
+myObject.b; // undefined 严格模式会抛出TypeError
+```
+
+###### 密封
+
+Object.seal(..)会创建一个密封的对象，实际上会在现有对象上调用Object.preventExtensions(..) 并把所有现有属性标记为configurable:false
+
+###### 冻结
+
+Object.freeze(..)会创建一个冻结对象，即现有对象调用Object.seal(..)并把所有writable:false
+
+##### [[Get]]
 
