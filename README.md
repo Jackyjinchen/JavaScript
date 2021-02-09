@@ -1507,7 +1507,7 @@ a; // {}
 
 使用new调用时，会构造一个对象并赋值给a，可以说带new的函数调用是JavaScript中的“构造函数调用”
 
-#### 技术
+##### 技术
 
 ```js
 function Foo() { /* .. */ }
@@ -1534,4 +1534,20 @@ Object.defineProperty( Foo.prototype, "constructor" , {
   value: Foo // 让 .constructor 指向 Foo
 } );
 ```
+
+#### （原型）继承
+
+```js
+// ES6前需要抛弃默认的Bar.prototype 调用Object.create(..)会凭空创建一个“新”对象并把新对象内部[[Prototype]]关联到指定的对象
+Bar.prototype = Object.create( Foo.prototype );
+// ES6开始可以直接修改现有Bar.prototype
+Object.setPrototypeOf( Bar.prototype, Foo.prototype );
+
+// 此方法不会创建一个新对象，而是让Bar.prototype直接引用Foo.prototype对象。
+Bar.prototype = Foo.prototype
+// 使用Foo(..)的“构造函数调用”，存在副作用（写日志、修改状态、注册到其他对象等）会影响Bar()的“后代”
+Bar.prototype = new Foo()
+```
+
+##### 检查“类”关系
 
