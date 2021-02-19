@@ -1,6 +1,6 @@
-## Javascript
+# 你不知道的Javascript学习笔记
 
-
+## 上册
 
 ### 作用域和闭包
 
@@ -1728,9 +1728,386 @@ c1.rand();
 
 
 
+## 中册
 
+### 类型和语法
 
+#### 类型
 
+##### 内置类型
 
+JavaScript有七种内置类型 null / undefined / boolean / number / string / object / symbol
 
+```js
+// JS对于null的判断存在问题
+typeof null === "object"; // true
+//针对于null类型的检测方式，可以采用复合条件来检测
+var a = null;
+(!a && typeof a === "object"); // true
+
+// fucntion是object一个子类型，内部具有属性[[call]]，该属性使其可以被调用
+typeof function a(){ /* .. */ } === "function"; // true
+```
+
+##### 值和类型
+
+JavaScript中变量没有类型，值才有类型。变量可以随时持有任何类型的值。
+
+###### undefined和undeclared
+
+在作用域中声明但没有赋值的变量是undefined；未在作用域中声明过的变量是undeclared
+
+```js
+var a;
+a; // undefined
+b; // ReferenceError: b is not defined
+
+typeof a; // "undefined"
+//typeof有一个特殊的安全防范机制，因此typeof b并未报错。
+typeof b; // "undefined"
+```
+
+###### typeof Undeclared
+
+针对于全局变量，可以通过typeof检查避免出现ReferenceError
+
+```js
+// 会抛出错误
+if(DEBUG) {
+  console.log( "Debugging is starting" );
+}
+// 这样是安全的
+if(typeof DEBUG !== "undefined") {
+  console.log( "Debugging is starting" );
+}
+
+// 也可以通过浏览器全局对象window，但是在其他环境中可能不能使用
+if(window.DEBUG) {
+  // ..
+}
+```
+
+#### 值
+
+##### 字符串
+
+字符串和字符数组都是类数组，都有length属性以及indexOf(..)(ES5之后开始支持)和concat(..)方法。
+
+字符串可以采用数组的访问方式a[1]，但是在老版本IE中不允许，可以采用a.charAt(1)。
+
+字符串没有一些数组函数，可以借用数组的非变更方法来处理字符串：
+
+```js
+a = "foo";
+a.join; // undefined
+a.map; // undefined
+
+var c = Array.prototype.join.call( a, "-" );
+var d = Array.prototype.map.call( a, function(v){
+  return v.toUpperCase() + ".";
+} ).join( "" );
+
+c; // "f-o-o"
+d; // "F.O.O"
+```
+
+字符串没有可变更成员函数reverse()：
+
+```js
+a.reverse; //undefined
+
+var c = a
+	// 将a的值转换为字符数组
+	.split( "" )
+	// 将数组中的字符进行倒转
+	.reverse()
+	// 将数组中的字符拼接回字符串
+	.join( "" );
+
+c; // "oof"
+```
+
+##### 数字
+
+JavaScript中只有number，没有真正意义上的整数，采用双精度格式（64位二进制）。
+
+```js
+var a = 5E10
+a; // 50000000000
+a.toExponential(); // "5e+10"
+
+var a = 42.59;
+a.toFixed( 1 ); // "42.6" 返回的是字符串形式
+a.toPrecision( 2 ); // "43" 指定有效数位的显示位数
+a.toPrecision( 5 ); // "42.590"
+
+//也适用于数字常量 注意 . 会被优先识别为数字常量的一部分
+42.toFixed( 3 ); // SyntaxError
+0.42.toFixed( 3 ); // "0.420"
+42..toFixed( 3 ); // "42.000"
+```
+
+数字常量还支持二进制、八进制和十六进制
+
+```js
+0xf3; // 243的十六进制
+
+//ES6 non-strict mode
+0363 // 243的八进制
+
+//ES6 strict mode 不再支持0363八进制格式，支持以下新格式
+0o363 // 243的八进制
+0b11110011 // 243的二进制
+```
+
+###### 数值精度
+
+二进制浮点数存在精度不准确问题：
+
+```js
+0.1 + 0.2 === 0.3; // false
+// ES6中，将机器精度2^-52 (2.220446049250313e-16)定义在了Number.EPSILON中
+// ES6之前，可采用polyfill
+if(!Number.EPSILON) {
+  Number.EPSILON = Math.pow(2,-52);
+}
+//用来比较数字是否相等
+function numbersCloseEnoughToEqual(n1,n2) {
+  return Math.abs( n1 - n2 ) < Number.EPSILON;
+}
+// 最大浮点数1.798e+308
+Number.MAX_VALUE
+// 最小浮点数5e-324
+Number.MIN_VALUE
+// 最大整数 2^53 - 1 9007199254740991
+Number.MAX_SAFE_INTEGER
+// 最小整数 -9007199254740991
+Number.MIN_SAFE_INTEGER
+```
+
+###### 整数检测
+
+```js
+// 检测一个值是否是整数
+// ES6
+Number.isInteger( 42 ); //true
+// ES6之前
+if(!Number.isInteger) {
+  Number.isInteger = function(num) {
+    return typeof num == "number" && num % 1 == 0;
+  }
+}
+
+// 检测一个值是否是安全的整数
+// ES6
+Number.isSafeInteger( Number.MAX_SAFE_INTEGER ); //true
+// ES6之前
+if(!Number.isSafeInteger) {
+  Number.isSafeInteger = function(num) {
+    return Number.isInteger( num ) &&
+      Math.abs( num ) <= Number.MAX_SAFE_INTEGER
+  }
+}
+```
+
+###### 32位有符号整数
+
+虽然整数最大能够达到53位，数位操作只适用于32位数字，安全范围就要小很多，变成从 Math.pow(-2,31)（-2147483648， 约－21 亿）到 Math.pow(2,31) - 1（2147483647，约 21 亿）。
+
+```js
+//可以将变量a中的数字转换为32位有符号整数，因为数位运算符|只适用于32位整数
+a | 0
+```
+
+##### 特殊数值
+
+###### 不是值的值
+
+undefined和null只有一个值，即它本身。他们的名称即是类型也是值。
+
+null指空值（empty value）
+undefined指没有值（missing value）
+
+可以采用void运算符来得到undefined
+
+```js
+// void ___ 使表达式不返回值
+void a // 没有返回值，因此返回结果是undefined
+```
+
+###### 特殊的数字
+
+1. 不是数字的数字
+
+当数学运算的操作数不是数字类型，无法返回一个有效数字，这种情况下返回值为NaN。
+
+NaN是唯一一个非自反的值（自反，reflexive，即 x === x 不成立）
+
+```js
+// 可采用内建的全局工具函数isNaN(..)来判断是否是NaN
+var a = 2 / "foo";
+isNaN( a ); //true
+```
+
+isNaN(..)过于死板，检查参数是不是NaN，也不是数字
+
+```js
+// ES6开始可以使用工具函数Number.isNaN(..)
+// ES6前polyfill
+if(!Number.isNaN) {
+  Number.isNaN = function(n) {
+    return (
+      typeof n === "number" &&
+      window.isNaN( n )
+    );
+  };
+}
+
+// 可以采用NaN不等于自身这个特点来简单判断
+if(!Number.isNaN) {
+  Number.isNaN = function(n) {
+    return n !== n;
+  };
+}
+```
+
+###### 无穷数
+
+JS使用有限数字表示法，在JS中运行时错误，例如“除以0”，结果为Infinity
+
+```js
+// Number.POSITIVE_INfiNITY
+var a = 1 / 0; // Infinity
+// Number.NEGATIVE_INfiNITY
+var b = -1 / 0; // -Infinity
+
+// 对超出处理范围，IEEE 754规范采用就近取整模式
+var a = Number.MAX_VALUE // 1.7976931348623157e+308
+a + a; // Infinity
+a + Math.pow( 2, 970); // Infinity 更接近Infinity被先上去整
+a + Math.pow( 2, 969); // 1.7976931348623157e+308 向下取整
+```
+
+###### 零值
+
+JavaScript包含常规的 0 和一个 -0。
+
+```js
+// 加法和减法怒算不会得到负零。
+var a = 0 / -3; // -0
+// 对 -0 进行字符化会返回 0
+a.toString(); // "0"
+// 反向操作得到结果是准确的
+Number( "-0" ); // -0
++"-0"; // -0
+
+//区分 -0 和 0
+function isNegZero(n) {
+  n = Number( n )
+  return (n === 0) && (1/n === -Infinity);
+}
+isNegZero(-0); //true
+isNegZeron(0); //false
+```
+
+负零可以保留符号位用于代表其他信息（例如移动的方向）。
+
+###### 特殊等式
+
+ES6中加入了Object.is(..)判断两个值是否绝对相等
+
+```js
+var a = 2 / "foo"
+bar b = -3 * 0;
+
+Object.is( a, NaN ); // true
+Object.is( b, -0 ); // true
+Object.is( b, 0 ); // false
+
+// ES6前polyfill
+if(!Object.is) {
+  Object.is = function(v1, v2) {
+    // 判断是否是 -0
+    if (v1 === 0 && v2 ===0) {
+      return 1 / v1 === 1 / v2;
+    }
+    // 判断是否是NaN
+    if (v1 !== v1) {
+      return v2 !== v2;
+    }
+    // 其他情况
+    return v1 === v2;
+  };
+}
+```
+
+##### 值和引用
+
+简单值（即标量基本类型值，scalar primitive）总是通过值复制的方式来赋值 / 传递，包括null、undefined、字符串、数字、布尔和 ES6 中的 symbol。
+
+复合值（compound value）——对象（包括数组和封装对象）和函数，则总是通过引用复制的方式来赋值 / 传递。
+
+```js
+var a = 2;
+var b = a;
+b++;
+a; // 2
+b; // 3
+
+var c = [1,2,3];
+var d = c;
+d.push( 4 ); // 改变的是值本身，而非指向变化
+c; // [1,2,3,4]
+d; // [1,2,3,4]
+
+// 由于引用指向的是值本身而非变量，所以一个引用无法更改另一个引用的指向
+var a = [1,2,3];
+var b = a;
+a; // [1,2,3]
+b; // [1,2,3]
+
+b = [4,5,6];
+a; // [1,2,3]
+b; // [4,5,6]
+
+//如果通过值复制的方式来传递复合值，就需要创建一个副本
+foo( a.slice() );
+// slice(..)不带参数会返回当前数组的一个浅复本(shallow copy)，由于传递给函数的是指向该复本的引用，所以foo(..)操作不会影响a指向的数组
+
+// 相反的，如果将标量基本类型传到函数内进行更改，就需要封装到一个复合值中
+function foo(wrapper) {
+  wrapper.a = 42;
+}
+var obj = {
+  a: 2
+};
+foo(obj);
+obj.a; // 42
+
+//岁软传递的是指向数字对象的引用副本，但是由于x = x + 1 时拆箱，x变成了数字对象，而b仍指向原来的值为2的数字对象
+function foo(x) {
+  x = x + 1;
+  x; // 3 
+}
+var a = 2;
+var b = new Number( a ); // Object(a)也一样
+foo( b );
+console.log( b ); // 是2，不是3
+```
+
+#### 原生函数
+
+String() / Number() / Boolean() / Array() / Object()
+Function() / RegExp() / Date() / Error() / Symbol()
+
+```js
+var a = new String( "abc" );
+typeof a; // 是"object",不是"String" 返回的是对象类型的子类型
+a instanceof String // true
+Object.prototype.toString.call( a ) // "[object String]"
+```
+
+##### 内部属性[[Class]]
+
+所有typeof返回值为"object"的对象都包含一个内部属性[[Class]]，无法直接访问，一般通过Object.prototype.toString(..)查看。
 
