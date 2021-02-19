@@ -1456,7 +1456,7 @@ myObject.foo = "bar"
 
 1. 针对这一赋值语句，若myObject中包含foo的普通数据访问属性，则只会修改已有属性值。
 2. 若foo存在myObject中，也出现在[[Prototype]]链上层，会发生屏蔽。myObject中包含的foo属性会屏蔽原型链上层的所有foo属性。
-3. 若foo不存在在myObjec体重，就会遍历[[Prototype]]
+3. 若foo不存在于myObject中，就会遍历[[Prototype]]
    1. 若链上存在foo的普通数据访问属性，并且没有被标记为只读(writable:true)，就会在myObject中添加一个foo的新属性，它是屏蔽属性。
    2. 若存在且被标记为只读(writable:false)，不会发生屏蔽，该条赋值语句被忽略，严格模式下抛出错误。
    3. 若链上存在foo并且是一个setter，就会调用setter，foo不会添加到myObject，也不会重新定义foo这个setter。
@@ -1550,4 +1550,187 @@ Bar.prototype = new Foo()
 ```
 
 ##### 检查“类”关系
+
+检查对象a的委托对象，在传统面向类环境中通常称为内省（或者反射）
+
+```js
+// 查询a的整条[[Prototype]]链中是否有指向Foo.prototype的对象。智能处理对象(a)和函数(带.prototype引用的Foo)之间的关系，无法判断两个对象是否通过[[Prototype]]链关联
+a instanceof Foo;
+
+// 是否出现过Foo.prototype
+Foo.prototype.isPrototypeOf( a ); // true
+b.isProtytypeOf(c) //可判断两个对象之间的关系
+
+//获取一个对象的[[Prototype]]链
+Object.getPrototypeOf( a );
+// .__proto__存在于Object.prototype中，像一个getter/setter低啊用Object.getPrototypeOf和Object.setPrototypeOf
+a.__proto__ === Foo.prototype; //ES6
+```
+
+#### 对象关联
+
+##### 创建关联
+
+Object.create(..)会创建一个新对象并关联到指定对象，充分发挥[[Prototype]]的委托机制，而**避免new构造函数调用生成.prototype和.constructor引用**
+
+**Object.create(null)**会创建一个拥有空链接的对象，无法进行委托。由于没有原型链，所以instanceof操作符无法进行判断。这种特殊的空[[Prototype]]对象通常被称作“字典”，适合用来存储数据。
+
+在ES5之前使用，可以采用polyfill代码实现：
+
+```js
+// 构造一个一次性函数F，并改写它的.prototype 属性使其指向要关联的对象，在使用new F()来构造一个新的对象进行关联
+if(!Object.create) {
+  Object.create = function(o){
+    function F(){}
+    F.prototype = o;
+    return new F();
+  };
+}
+```
+
+##### 关联关系是备用
+
+```js
+var anotherObject = {
+  cool: function() {
+    console.log( "cool!" )
+  }
+};
+
+// 使用myObject无法处理时使用备用anotherObject，会导致难以维护，myObject中不存在cool()
+var myObject = Object.create( anotherObject );
+myObject.cool(); // "cool!"
+
+// 委托设计模式，通过[[Prototype]]委托到anotherObject.cool(),可以使API接口设计更加清晰
+myObject.doCool = function() {
+  this.cool(); // 内部委托！
+}；
+myObject.doCool(); // "cool!"
+```
+
+
+
+### 行为委托
+
+#### 面向委托的设计
+
+##### 委托理论
+
+​		在类理论中，通常定义一个通用父（基）类，并集成其来添加一些特殊的行为来处理对应的任务。可以重写和多态，甚至通过super调用原始版本。
+​		在JavaScript中，采用委托行为来考虑此问题。相比于面向对象，可以称之为“对象关联”(OLOO, objects linked to other objects)：
+
+```js
+Task = {
+  setID: function(ID) { this.id = ID; },
+  outputID: function() { console.log( this.id ); }
+}
+
+// 让XYZ委托Task
+XYZ = Object.create( Task );
+XYZ.prepareTask = function(ID,Label) {
+  this.setID( ID );
+  this.label = Label;
+};
+XYZ.outputTaskDetails = function() {
+  this.outputID();
+  console.log( this.label );
+};
+```
+
+与面向类方式的不同：
+
+1. 状态最好直接存储在委托者(XYZ)上，而不是委托目标(Task)上。
+2. 类设计模式中，采用重写方式尽量少使用容易被重写的通用方法名。
+3. 当委托者寻找不到的方法，会通过[[Prototype]]委托关联查找。
+
+##### 比较思维模型
+
+###### 典型的面向对象风格
+
+```js
+function Foo(who) {
+  this.me = who;
+}
+Foo.prototype.identify = function() {
+  return "I am " + this.me;
+};
+function Bar(who) {
+  Foo.call( this, who );
+}
+Bar.prototype = Object.create( Foo.prototype );
+Bar.prototype.speak = function() {
+  alert( "Hello, " + this.identify() + ".");
+};
+
+var b1 = new Bar( "b1" );
+var b2 = new Bar( "b2" );
+b1.speak();
+b2.speak();
+```
+
+###### 采用对象关联风格
+
+```js
+Foo = {
+  init: function(who) {
+    this.me = who;
+  },
+  identify: function() {
+    return "I am " + this.me;
+  }
+};
+Bar = Object.create( Foo );
+
+Bar.speak = function() {
+  alert( "Hello, " + this.identify() + "." );
+};
+
+var b1 = Object.create( Bar );
+b1.init( "b1" );
+var b2 = Object.create( Bar );
+b1.init( "b2" );
+b1.speak();
+b2.speak();
+```
+
+对象关联风格更加简介，而无需模仿类的行为（构造函数、原型以及new）。
+
+类风格代码的思维模型强调实体以及实体间的关系：
+
+<img src="README.assets/image-20210218143429269.png" alt="image-20210218143429269" style="zoom:50%;" />
+
+简化上图，只展示必要的对象和关系：
+
+<img src="README.assets/image-20210218143705939.png" alt="image-20210218143705939" style="zoom:50%;" />
+
+虚线表示的是Bar.prototype继承Foo.prototype 之后丢失的.constructor属性引用。
+
+对象关联风格代码的思维模型：
+
+<img src="README.assets/image-20210218144023704.png" alt="image-20210218144023704" style="zoom:50%;" />
+
+#### ES6中的class
+
+class是现有[[Prototype]]委托机制的一种语法糖，JavaScript中并不会像传统面向类的语言一样在生命时静态复制所有行为。如果修改了父“类”中的方法，那所有子“类”都会受到影响，只是使用基于[[Prototype]]的实时委托。
+
+```js
+class C {
+  constructor() {
+    this.num = Math.random();
+  }
+  rand() {
+    console.log( "Random: " + this.num );
+  }
+}
+var c1 = new C();
+c1.rand();
+```
+
+
+
+
+
+
+
+
 
