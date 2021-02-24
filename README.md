@@ -2111,3 +2111,83 @@ Object.prototype.toString.call( a ) // "[object String]"
 
 所有typeof返回值为"object"的对象都包含一个内部属性[[Class]]，无法直接访问，一般通过Object.prototype.toString(..)查看。
 
+##### 封装对象
+
+基本类型没有 .length 和 .toString() 这样的属性和方法，需要通过封装对象才能访问，JavaScript会自动对基本类型值包装。
+
+要想自行封装基本类型值，可以使用Object(..)函数，但不推荐使用
+
+```js
+var a = "abc";
+a.length; // 3
+a.toUpperCase(); // "ABC"
+
+var b = new String(a);
+var c = Object(a);
+
+typeof b; // "object"
+typeof c; // "object"
+b instanceof String; // true
+c instanceof String; // true
+Object.prototype.toString.call(b); // "[object String]"
+Object.prototype.toString.call(c); // "[object String]"
+```
+
+拆封对象可以使用valueOf()函数
+
+```js
+var b = new Number(42);
+b.valueOf(); // 42
+```
+
+##### 原生函数作为构造函数
+
+对于数组（array）、对象（object）、函数（function）和正则表达式，常量和使用构造函数的效果是一样的，尽量避免使用构造函数。
+
+###### Array(..)
+
+数组没有预设长度，创造出的是空数组。在Chrome中如下表示
+
+```js
+var a = new Array( 3 );
+var b = [ undefined, undefined, undefined ];
+var c = [];
+c.length = 3;
+
+a; // [empty × 3]
+b; // [undefined,undefined,undefined]
+c; // [empty × 3]
+
+//通过下述方式创建undefiend单元的数组（而非空单元）
+var a = Array.apply( null, { length: 3} );
+a; // [ undefined, undefined, undefined ]
+```
+
+###### Object(..)、Function(..) 和 RegExp(..)
+
+尽量不要使用上述来创建对象。RegExp(..)可以用来定义动态正则表达式
+
+```js
+var name = "Kyle";
+var namePattern = new RegExp( "\\b(?:" + name + ")+\\b", "ig" );
+var matches = someText.match( namePattern );
+```
+
+###### Date(..) 和 Error(..)
+
+Date()用来获取当前Unix时间戳（1970年1月1日开始计算，以秒为单位）。创建日期使用new Date()，如果调用Date()时不带new，会得到当前日期的字符串值，浏览器使用 "Fri Jul 18 2014 00:31:02 GMT-0500(CDT)"。
+
+ES5中引入了静态函数Date.now()
+
+```js
+// polyfill ES5之前
+if(!Date.now) {
+  Date.now = function() {
+    return (new Date()).getTime();
+  };
+}
+```
+
+###### Symbol(..)
+
+符号是具有唯一性的特殊值，用它来命名对象属性不容易导致重名。ES6中有一些预定义符号，以Symbol的静态属性形式出现，如Symbol.create、Symbol.iterator等。使用Symbol(..)原生构造函数来自定义符号，不能带new关键字
